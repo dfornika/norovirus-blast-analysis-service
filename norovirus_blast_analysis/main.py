@@ -87,7 +87,7 @@ def store_blast_results(analysis: models.Analysis, blast_results_path: Path, db:
             db_blast_record = models.BlastRecord(
                 analysis_result_fk=analysis_result.pk,
                 query_seq_id=row['query_seq_id'],
-                subject_accession=row['subject_accession'],
+                subject_accession=row['subject_seq_id'],
                 subject_strand=row['subject_strand'],
                 query_length=row['query_length'],
                 query_start=row['query_start'],
@@ -102,10 +102,9 @@ def store_blast_results(analysis: models.Analysis, blast_results_path: Path, db:
                 num_gaps=row['num_gaps'],
                 e_value=row['e_value'],
                 bitscore=row['bitscore'],
-                subject_taxids = row['subject_taxids'],
-                subject_names = row['subject_names'],
-                genus = row['genus'],
-                species = row['species'],
+                accession = row['subject_accession'],
+                genotype = row['genotype'],
+                region = row['region'],
                 database_name = row['database_name'],
                 database_version = row['database_version'],
                 database_date = row['database_date'],
@@ -138,11 +137,13 @@ def run_analysis(analysis: models.Analysis, db: Session):
         'nextflow',
         'run',
         'BCCDC-PHL/norovirus-blast-nf',
-        '-r', 'main',
+        '-r', 'refactor',
         '-profile', 'conda',
         '--cache', os.path.join(os.path.expanduser('~'), '.conda/envs'),
         '--fasta_input', os.path.join(analysis_dir),
-        '--db', '/home/dfornika/code/norovirus-blast-nf/db.fa',
+        '--db', '/home/dfornika/code/norovirus-blast-nf/test_input/db/2016-10-31_norovirus.fa',
+        '--collect_db_metadata',
+        '--collect_outputs',
         '--outdir', os.path.join(analysis_dir, 'norovirus-blast-nf-v0.1-output'),
         '-with-trace', os.path.join(analysis_dir, 'norovirus-blast-nf-v0.1-output', analysis.analysis_uuid + '_nextflow_trace.tsv'),
         '-with-report', os.path.join(analysis_dir, 'norovirus-blast-nf-v0.1-output', analysis.analysis_uuid + '_nextflow_report.html'),
@@ -151,11 +152,11 @@ def run_analysis(analysis: models.Analysis, db: Session):
     logger.info(f"Running analysis {analysis.analysis_uuid}")
     analysis.status = "RUNNING"
     db.commit()
-    result = subprocess.run(nextflow_cmd, check=True, capture_output=True, text=True)
+    result = subprocess.run(nextflow_cmd, check=True, capture_output=False, text=True)
     if result.returncode == 0:
         logger.info(f"Analysis {analysis.analysis_uuid} completed successfully")
         analysis.status = "SUCCESS"
-        blast_results_path = os.path.join(analysis_dir, '16s-nf-v0.1-output', 'collected_blast.csv')
+        blast_results_path = os.path.join(analysis_dir, 'norovirus-blast-nf-v0.1-output', 'collected_top_result_by_region.csv')
         if os.path.exists(blast_results_path):
             logger.info(f"Storing blast results for analysis {analysis.analysis_uuid}")
             store_blast_results(analysis, blast_results_path, db)
